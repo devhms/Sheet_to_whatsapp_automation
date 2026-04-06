@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+env/
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Credentials (NEVER commit these!)
+credentials.json
+service_account.json
+.env
+*.key
+*.pem
+
+# Selenium
+selenium_data/
+geckodriver.log
+chromedriver.log
+
+# Logs
+*.log
+logs/
+
+# Bot State
+last_processed.txt
+.delivery_journal.json
+.bot_heartbeat.json
+.bot_events.jsonl
+.submission_bot.lock
+send_failure_*.png
+chat_title_mismatch.png
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Local research/cache artifacts
+.firecrawl/
+.ruff_cache/
+
+# Local skill mirrors (very large, generated)
+external_skills/
+related_skills/

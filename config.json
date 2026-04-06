@@ -1,0 +1,17 @@
+{
+    "sheet_name": "Umeedwaran Daily Audit (Responses)",
+    "service_account_file": "service_account.json",
+    "sheet_url": "https://docs.google.com/spreadsheets/d/1G0_3GSC8F6iQUEFf5_iwVVz5aCWi4hO1FB-V9z9uplM/edit?usp=sharing",
+    "targets": {
+        "Ibrahim": "+923300301917",
+        "Muazzam": "+923055375994"
+    },
+    "all_members": ["Ibrahim", "Muazzam"],
+    "group_target": "",
+    "admin_number": "",
+    "form_link": "",
+    "selenium_data_dir": "C:/Users/hafiz/.jamiat_bot_selenium_data_v2",
+    "poll_interval_seconds": 30,
+    "whatsapp_qr_timeout": 300,
+    "log_level": "INFO"
+}
