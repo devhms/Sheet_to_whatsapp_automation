@@ -119,7 +119,9 @@ def run_red_flag_scanner(config: Config, whatsapp: WhatsAppService) -> None:
             continue
 
         name = _extract_member_name(row_dict)
-        already_notified = str(row_dict.get("Admin_Notified", "")).strip().lower() == "true"
+        already_notified = (
+            str(row_dict.get("Admin_Notified", "")).strip().lower() == "true"
+        )
 
         missed_prayers: list[str] = []
         for col in SALAH_COLUMNS:
@@ -130,7 +132,9 @@ def run_red_flag_scanner(config: Config, whatsapp: WhatsAppService) -> None:
         if missed_prayers and not already_notified:
             logger.warning("Red flag found for: %s", name)
             alert_msg = format_red_flag_alert(name, missed_prayers)
-            sent = whatsapp.send_message(config.admin_number, alert_msg, use_search=False)
+            sent = whatsapp.send_message(
+                config.admin_number, alert_msg, use_search=True
+            )
             if sent:
                 sheet_service.update_cell_safe(worksheet, i + 2, status_col_idx, "TRUE")
                 logger.info("Updated Admin_Notified for %s", name)
@@ -153,7 +157,9 @@ def run_reminder(config: Config, whatsapp: WhatsAppService) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Jamiat Management System Bot")
-    parser.add_argument("mode", choices=["ghost", "scanner", "reminder"], help="Mode to run")
+    parser.add_argument(
+        "mode", choices=["ghost", "scanner", "reminder"], help="Mode to run"
+    )
     args = parser.parse_args()
 
     config = Config()

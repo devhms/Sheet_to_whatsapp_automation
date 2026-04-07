@@ -8,10 +8,10 @@ import submission_bot as sb
 
 
 class SubmissionBotHelpersTest(unittest.TestCase):
-    def test_choose_delivery_target_prefers_phone(self):
+    def test_choose_delivery_target_prefers_name_for_search(self):
         target, use_search = sb._choose_delivery_target("Ibrahim", "+923300301917")
-        self.assertEqual(target, "+923300301917")
-        self.assertFalse(use_search)
+        self.assertEqual(target, "Ibrahim")
+        self.assertTrue(use_search)
 
     def test_choose_delivery_target_uses_name_when_number_invalid(self):
         target, use_search = sb._choose_delivery_target("Muazzam", "not-a-phone")

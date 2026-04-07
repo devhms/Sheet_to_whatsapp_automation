@@ -137,11 +137,6 @@ class WhatsAppService:
         return "brave"
 
     @staticmethod
-    def _normalize_phone(target: str) -> str:
-        """Normalize phone number to digits-only format for WhatsApp URL."""
-        return re.sub(r"\D", "", str(target))
-
-    @staticmethod
     def _is_session_lost(exc: Exception) -> bool:
         """Detect lost or invalid Selenium session exceptions."""
         if isinstance(exc, InvalidSessionIdException):
@@ -291,6 +286,16 @@ class WhatsAppService:
                 continue
         return False
 
+    def _ensure_whatsapp_tab_ready(self, timeout: int = 20) -> None:
+        """Open WhatsApp Web only if current tab is not already on it."""
+        driver = self._driver_or_raise()
+        current_url = str(getattr(driver, "current_url", "") or "").lower()
+        if "web.whatsapp.com" in current_url:
+            return
+
+        logger.info("Opening WhatsApp Web in current tab")
+        driver.get("https://web.whatsapp.com")
+
     def _find_first_element(
         self,
         locators: list[tuple[str, str]],
@@ -436,15 +441,7 @@ class WhatsAppService:
             self.close()
             raise RuntimeError(f"Unable to start Brave in all startup modes: {details}")
 
-        try:
-            self._driver.get("https://web.whatsapp.com")
-        except Exception as nav_exc:
-            logger.warning(
-                "Initial WhatsApp navigation failed, retrying once: %s",
-                nav_exc,
-            )
-            time.sleep(1.5)
-            self._driver.get("https://web.whatsapp.com")
+        self._ensure_whatsapp_tab_ready(timeout=25)
 
         logger.info("Waiting for WhatsApp login (timeout: %ds)...", self._qr_timeout)
         self._wait_for_login()
@@ -596,15 +593,6 @@ class WhatsAppService:
             f"Chat title mismatch. Expected '{expected}', found '{current}'"
         )
 
-    def _send_via_url(self, target: str) -> None:
-        """Open chat via phone-number URL."""
-        driver = self._driver_or_raise()
-        clean_target = self._normalize_phone(target)
-        if not clean_target:
-            raise ValueError(f"Invalid phone target: {target}")
-
-        driver.get(f"https://web.whatsapp.com/send?phone={clean_target}&text")
-
     def _wait_chat_ready_for_send(self, timeout: int = 25) -> None:
         """Ensure message composer is ready before typing."""
         deadline = time.time() + timeout
@@ -668,13 +656,7 @@ class WhatsAppService:
                 if not self._driver:
                     self.init_browser()
 
-                open_with_search = use_search
-                if open_with_search:
-                    self._send_via_search(target)
-                elif self.is_phone_target(target):
-                    self._send_via_url(target)
-                else:
-                    self._send_via_search(target)
+                self._send_via_search(target)
 
                 self._wait_chat_ready_for_send(timeout=25)
                 self._type_and_send(message)
@@ -706,15 +688,12 @@ class WhatsAppService:
                 ):
                     try:
                         logger.warning(
-                            "Refreshing WhatsApp UI after search-box miss for %s",
+                            "Retrying in-app search after search-box miss for %s",
                             target,
                         )
-                        self._driver.get("https://web.whatsapp.com")
-                        self._wait_for_login()
+                        self._open_search_box(timeout=8)
                     except Exception as refresh_exc:
-                        logger.warning(
-                            "Refresh after search miss failed: %s", refresh_exc
-                        )
+                        logger.warning("Search-box recovery failed: %s", refresh_exc)
 
                 if attempt < self._max_send_attempts:
                     time.sleep(min(2 * attempt, 6))

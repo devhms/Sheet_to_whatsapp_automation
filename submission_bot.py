@@ -213,15 +213,12 @@ def _canonicalize_delivered_targets(
 
 
 def _choose_delivery_target(target_name: str, number: str) -> tuple[str, bool]:
-    """Choose safest target route: phone URL first, chat search as fallback."""
-    clean_number = str(number).strip()
-    if WhatsAppService.is_phone_target(clean_number):
-        return clean_number, False
-
+    """Choose target for WhatsApp in-app search (no URL navigation)."""
     clean_name = str(target_name).strip()
     if clean_name:
         return clean_name, True
 
+    clean_number = str(number).strip()
     return clean_number, True
 
 
@@ -582,19 +579,6 @@ def main() -> None:
                             message,
                             use_search=use_search,
                         )
-
-                        if not success and not use_search:
-                            fallback_label = str(target_name).strip()
-                            if fallback_label and fallback_label != delivery_target:
-                                logger.warning(
-                                    "Phone route failed for %s; retrying by chat label",
-                                    target_name,
-                                )
-                                success = whatsapp.send_message(
-                                    fallback_label,
-                                    message,
-                                    use_search=True,
-                                )
 
                         if success:
                             run_stats.sends_succeeded += 1

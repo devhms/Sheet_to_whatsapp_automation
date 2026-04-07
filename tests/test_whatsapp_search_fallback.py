@@ -10,6 +10,28 @@ from src.whatsapp_service import WhatsAppService, WhatsAppSelectors
 
 
 class WhatsAppSearchFallbackTest(unittest.TestCase):
+    def test_ensure_whatsapp_tab_ready_does_not_reload_if_on_whatsapp(self):
+        svc = WhatsAppService("C:/tmp/wa-profile", qr_timeout=10)
+
+        driver = MagicMock()
+        driver.current_url = "https://web.whatsapp.com/"
+        svc._driver = driver
+
+        svc._ensure_whatsapp_tab_ready()
+
+        driver.get.assert_not_called()
+
+    def test_ensure_whatsapp_tab_ready_opens_once_if_not_on_whatsapp(self):
+        svc = WhatsAppService("C:/tmp/wa-profile", qr_timeout=10)
+
+        driver = MagicMock()
+        driver.current_url = "about:blank"
+        svc._driver = driver
+
+        svc._ensure_whatsapp_tab_ready()
+
+        driver.get.assert_called_once_with("https://web.whatsapp.com")
+
     def test_open_search_box_uses_shortcuts_after_initial_timeout(self):
         svc = WhatsAppService("C:/tmp/wa-profile", qr_timeout=10)
 
