@@ -1,188 +1,210 @@
-# Sheet_to_whatsapp_automation
+# Sheet to WhatsApp Automation
 
-Automated WhatsApp notifications for daily audit reports, powered by Google Sheets and Selenium.
+Production-focused automation that reads Google Sheets submissions and delivers WhatsApp notifications with strong delivery guarantees, profile/session persistence hardening, and operational observability.
 
-Project codename in local folder: `fiery-mare`.
+## Why this project exists
 
-## Features
+This bot solves a common operations problem: submissions are logged in a Google Sheet, but people still need timely WhatsApp notifications and follow-up workflows.
 
-- **Submission Bot** - Monitors Google Sheets for new entries and sends WhatsApp notifications
-- **Ghost Hunter** - Identifies members who haven't submitted their daily reports
-- **Red Flag Scanner** - Detects missed prayers and alerts admins
-- **Morning Bell** - Sends daily reminders to the group
+This codebase is built to be resilient under real-world conditions:
 
-## April 2026 Reliability Hotfix
+- flaky browser startup
+- WhatsApp Web DOM changes
+- intermittent Google API failures
+- accidental duplicate runs
+- restart safety without duplicate sends
 
-- **No forced QR loop by default** - Startup now uses persistent profiles only (`primary` then `_backup`) in `submission_bot.py`
-- **Sticky profile preference** - Last successful persistent profile is remembered in `<selenium_data_dir>_active_profile.txt`
-- **Higher delivery precision** - Direct targets are sent phone-first (`/send?phone=...`) with chat-search fallback only when needed
-- **Stronger WhatsApp selector coverage** - Search locator set now supports both `div[contenteditable]` and `input[type="search"]` variants
-- **Operational safety** - Temporary/no-profile startup remains available in service code, but is disabled in production flow to preserve session continuity
+## Core workflows
 
-## Quick Start
+- `submission_bot.py`
+  - Polls Google Sheets for new rows
+  - Sends structured WhatsApp notifications to strict recipients
+  - Marks a row complete only after all required recipients receive delivery
 
-### 1. Setup
+- `jamiat_bot.py ghost`
+  - Finds members who did not submit today
+  - Sends group reminder list
+
+- `jamiat_bot.py scanner`
+  - Detects red-flag rows (missed prayers)
+  - Notifies admin and marks `Admin_Notified`
+
+- `jamiat_bot.py reminder`
+  - Sends a generic daily reminder message to group
+
+- `setup_sheet.py`
+  - Applies formulas for scoring/flags in the target sheet
+
+## Reliability features
+
+- strict recipient safety checks at startup (`Ibrahim`, `Muazzam`)
+- idempotent delivery journal (`.delivery_journal.json`)
+- row-level completion semantics (`Bot Details Sent = TRUE` only after both targets)
+- single-instance lock (`.submission_bot.lock`)
+- dual persistent browser profiles (`selenium_data_dir` + `_backup`)
+- last-working profile hint (`<selenium_data_dir>_active_profile.txt`)
+- phone-first direct delivery with search fallback
+- expanded selector strategy for WhatsApp UI variants
+- exponential backoff for Google Sheets read/write/auth
+- structured telemetry:
+  - `.bot_heartbeat.json`
+  - `.bot_events.jsonl`
+  - failure screenshots (`send_failure_*.png`, `chat_title_mismatch.png`)
+
+## Requirements
+
+- Windows (project scripts are `.bat` based)
+- Python 3.10+
+- Google service account with Sheets + Drive API access
+- A dedicated Selenium profile directory (outside default browser `User Data`)
+
+## Quick start
+
+1) Clone
+
 ```bash
-# Run the setup script
+git clone https://github.com/devhms/Sheet_to_whatsapp_automation.git
+cd Sheet_to_whatsapp_automation
+```
+
+2) Setup environment
+
+```bash
 setup.bat
-
-# Or manually:
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
 ```
 
-### 2. Configure
+This creates `venv`, installs dependencies, and prepares `.env` from `.env.example` if needed.
 
-**Copy and edit `.env`:**
-```bash
-copy .env.example .env
-```
+3) Configure
 
-Fill in:
-- `GOOGLE_SERVICE_ACCOUNT_FILE` - Path to your service account JSON
-- `GOOGLE_SHEET_URL` - Your Google Sheet URL
-- `WHATSAPP_GROUP_TARGET` - WhatsApp group name
-- `WHATSAPP_ADMIN_NUMBER` - Admin phone number
-- `SELENIUM_DATA_DIR` - Custom persistent browser profile path (must be outside AppData default browser profile)
-- `TARGETS` - Name:phone pairs for notifications
-- `ALL_MEMBERS` - Comma-separated member list
+- Place `service_account.json` in project root
+- Edit `config.json`
+- Optionally override with `.env`
 
-**Edit `config.json`:**
+Minimal `config.json` shape:
+
 ```json
 {
-    "sheet_url": "https://docs.google.com/spreadsheets/d/YOUR_ID/edit",
-    "targets": {
-        "Ibrahim": "+923300301917",
-        "Muazzam": "+923055375994"
-    },
-    "all_members": ["Ibrahim", "Muazzam"],
-    "group_target": "Your Group Name",
-    "admin_number": "+923XXXXXXXXX",
-    "form_link": "https://forms.google.com/your-form",
-    "selenium_data_dir": "C:/Users/hafiz/.jamiat_bot_selenium_data_v2"
+  "sheet_url": "https://docs.google.com/spreadsheets/d/YOUR_ID/edit",
+  "targets": {
+    "Ibrahim": "+923300301917",
+    "Muazzam": "+923055375994"
+  },
+  "all_members": ["Ibrahim", "Muazzam"],
+  "group_target": "Your Group Name",
+  "admin_number": "+923XXXXXXXXX",
+  "form_link": "https://forms.google.com/your-form",
+  "selenium_data_dir": "C:/Users/hafiz/.jamiat_bot_selenium_data_v2",
+  "poll_interval_seconds": 30,
+  "whatsapp_qr_timeout": 300,
+  "log_level": "INFO"
 }
 ```
 
-### 3. Get Google Credentials
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project → Enable Google Sheets API & Drive API
-3. Create Service Account → Download JSON key
-4. Save as `service_account.json` in project root
-5. Share your Google Sheet with the service account email
-
-### 4. Run
+4) Run
 
 ```bash
-# Submission Bot (monitors sheet continuously)
 run_bot.bat
+```
 
-# Ghost Hunter (check missing submissions)
+## Common commands
+
+```bash
+run_bot.bat
 check_missing.bat
-
-# Red Flag Scanner (check missed prayers)
 scan_flags.bat
-
-# Send Reminder
 send_reminder.bat
-
-# Apply Formulas to Sheet
 apply_formulas.bat
-
-# Inspect Sheet Headers
 venv\Scripts\python.exe inspect_headers.py
+venv\Scripts\python.exe ops_test_suite.py
 ```
 
-## Project Structure
+## Project structure
 
-```
-fiery-mare/
-├── src/                        # Core modules
-│   ├── __init__.py
-│   ├── config.py              # Configuration with .env support
-│   ├── logger.py              # Logging setup
-│   ├── sheet_service.py       # Google Sheets service (google-auth)
-│   ├── whatsapp_service.py    # WhatsApp Web automation
-│   └── messages.py            # Message templates
-├── submission_bot.py          # Main submission monitor
-├── jamiat_bot.py              # Ghost/Scanner/Reminder modules
-├── setup_sheet.py             # Apply formulas to sheet
-├── inspect_headers.py         # Utility to check sheet headers
-├── config.json                # Configuration
-├── .env                       # Environment variables (gitignored)
-├── .env.example               # Template for .env
-├── requirements.txt           # Python dependencies
-├── setup.bat                  # One-click setup
-├── run_bot.bat                # Run submission bot
-├── check_missing.bat          # Run ghost hunter
-├── scan_flags.bat             # Run red flag scanner
-├── send_reminder.bat          # Send daily reminder
-├── apply_formulas.bat         # Apply sheet formulas
-└── .gitignore                 # Git ignore rules
+```text
+.
+├── src/
+│   ├── config.py
+│   ├── logger.py
+│   ├── messages.py
+│   ├── sheet_service.py
+│   └── whatsapp_service.py
+├── tests/
+├── docs/
+├── submission_bot.py
+├── jamiat_bot.py
+├── setup_sheet.py
+├── ops_test_suite.py
+├── config.json
+├── .env.example
+└── README.md
 ```
 
-## Architecture
+## Configuration notes
 
-### Modern Stack
-- **google-auth** instead of deprecated `oauth2client`
-- **python-dotenv** for environment variable management
-- **RotatingFileHandler** for log management
-- **Multi-selector fallback** for WhatsApp Web (handles UI changes)
-- **Session persistence** via `user-data-dir` (scan QR once)
-- **Error recovery** with exponential backoff and session re-init
-- **Idempotent delivery tracking** using `Bot Delivery State` column
-- **Single-instance lock** to prevent duplicate bot runs
-- **Dual persistent profile fallback** (`selenium_data_dir` and `_backup`) with last-working profile hint
-- **Phone-first delivery routing** with search fallback for resilient sends
-- **Operational telemetry** via `.bot_heartbeat.json` and `.bot_events.jsonl`
-- **Type hints** throughout codebase
+- `config.json` is the primary source of truth.
+- `.env` can override selected keys (see `src/config.py`).
+- `TARGETS` env override is blocked by default for safety unless `ALLOW_TARGETS_ENV_OVERRIDE=1`.
 
-### Security
-- Credentials in `.env` (never committed)
-- Service account JSON gitignored
-- No hardcoded secrets
-- Config validation on startup
+## Security and compliance defaults
+
+- credentials files are gitignored (`service_account.json`, `credentials.json`, `.env`)
+- target recipient mismatch fails fast on startup
+- default browser user-data directories are blocked for Selenium profile path
 
 ## Troubleshooting
 
-### QR Code not scanning
-- Close all Brave windows completely and run bot again
-- Keep `selenium_data_dir` on a dedicated folder (not Brave default AppData profile)
-- If profile got corrupted: stop bot, rename `C:\Users\hafiz\.jamiat_bot_selenium_data_v2`, then login once again
-- Confirm you are not launching temp-profile mode; production startup uses persistent profiles only
+### QR appears repeatedly
 
-### QR shown every restart
-- Check startup logs; you should see `primary persistent profile` or `secondary persistent profile`
-- If you ever see `temporary profile`, that run is intentionally ephemeral and will require fresh QR
-- Keep Brave closed before startup so lock files can be cleaned and persistent profile can open
+- Ensure startup is using persistent profile (check logs)
+- Close all Brave windows before bot start
+- Keep `selenium_data_dir` dedicated and stable
+- Avoid temp-profile runs for production session continuity
 
-### Sheet connection fails
-- Verify `service_account.json` exists and is valid
-- Share sheet with service account email
-- Check sheet URL in config
+### Startup crash: `DevToolsActivePort`
 
-### WhatsApp selectors not working
-- The bot tries multiple selectors automatically
-- Update selectors in `src/whatsapp_service.py` if WhatsApp UI changes
-- Direct targets now bypass sidebar search by using phone URL route first
+- Bot auto-attempts primary then backup persistent profile
+- If both fail, inspect profile health and rotate broken directory manually
 
-### Runtime observability
-- ` .bot_heartbeat.json` shows current liveness, uptime, and send stats
-- `.bot_events.jsonl` stores structured event records (`send_success`, `send_failure`, `row_marked_done`, `loop_error`)
-- Failure screenshots are saved as `send_failure_<target>_<attempt>.png` and `chat_title_mismatch.png`
+### Send failures due to search box
 
-### Module not found errors
-- Run `setup.bat` to ensure venv is created
-- Activate venv: `venv\Scripts\activate`
+- Direct recipients now use phone route first
+- Search is still used as fallback and for group/name-based flows
+- Inspect `send_failure_*.png` for current DOM state
 
-## Deep Reliability Docs
+### Sheets write/read issues
 
-- `docs/RELIABILITY_GUIDE.md` - End-to-end reliability architecture, guarantees, limits, and roadmap
-- `docs/OPERATIONS_RUNBOOK.md` - Day-to-day operation and incident handling runbook
-- `docs/WEB_RESEARCH_SUMMARY_APRIL_2026.md` - External research findings and how they map to implementation choices
-- `docs/SESSION_PERSISTENCE_AND_DELIVERY_FIX_APRIL_2026.md` - Root cause analysis, implemented fix, and verification evidence
+- Built-in retries with exponential backoff are applied
+- Confirm service account has access to the spreadsheet
+
+## Testing and verification
+
+Run full smoke tests:
+
+```bash
+venv\Scripts\python.exe ops_test_suite.py
+```
+
+Covers:
+
+- syntax compile
+- unit tests
+- strict target validation
+- idempotency journal restart behavior
+- Selenium startup probe
+- telemetry helper integrity
+
+## Operations and deep docs
+
+- `docs/RELIABILITY_GUIDE.md`
+- `docs/OPERATIONS_RUNBOOK.md`
+- `docs/WEB_RESEARCH_SUMMARY_APRIL_2026.md`
+- `docs/SESSION_PERSISTENCE_AND_DELIVERY_FIX_APRIL_2026.md`
+
+## Release
+
+Current release tag: `v1.0.0`
 
 ## License
 
-Private project - All rights reserved
+Private project. All rights reserved.
