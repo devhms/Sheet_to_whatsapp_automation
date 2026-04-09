@@ -10,9 +10,17 @@ from src.whatsapp_service import WhatsAppService, WhatsAppSelectors
 
 
 class WhatsAppSearchFallbackTest(unittest.TestCase):
-    def test_chat_title_match_allows_contains(self):
+    def test_chat_title_match_allows_token_boundary_matches(self):
         self.assertTrue(WhatsAppService._matches_chat_title("Muazzam", "muazzam Ijt"))
         self.assertTrue(
+            WhatsAppService._matches_chat_title(
+                "Ibrahim Salman", "Team Ibrahim   Salman"
+            )
+        )
+
+    def test_chat_title_match_rejects_ambiguous_substring(self):
+        self.assertFalse(WhatsAppService._matches_chat_title("Ali", "Alicia"))
+        self.assertFalse(
             WhatsAppService._matches_chat_title("Ibrahim Salman", "Ibrahim")
         )
 
@@ -54,7 +62,12 @@ class WhatsAppSearchFallbackTest(unittest.TestCase):
         def fake_find(locators, timeout=20, require_clickable=False):
             calls["count"] += 1
             if calls["count"] == 1:
+                self.assertEqual(locators, WhatsAppSelectors.SEARCH_BOX)
                 raise TimeoutException("search not visible")
+            if calls["count"] == 2:
+                self.assertEqual(locators, WhatsAppSelectors.SEARCH_TRIGGER)
+                self.assertTrue(require_clickable)
+                raise TimeoutException("search trigger missing")
 
             self.assertEqual(locators, WhatsAppSelectors.SEARCH_BOX)
             self.assertTrue(require_clickable)
@@ -158,6 +171,38 @@ class WhatsAppSearchFallbackTest(unittest.TestCase):
 
             self.assertGreaterEqual(len(calls), 1)
             self.assertEqual(calls[0], secondary)
+
+    def test_init_browser_does_not_kill_global_chromedriver_by_default(self):
+        with tempfile.TemporaryDirectory() as td:
+            primary = os.path.join(td, "wa-profile")
+            svc = WhatsAppService(primary, qr_timeout=10)
+
+            svc._kill_stale_chromedriver_processes = MagicMock()  # type: ignore[method-assign]
+            svc._start_driver = MagicMock(return_value=MagicMock())  # type: ignore[assignment]
+            svc._wait_for_login = MagicMock()  # type: ignore[assignment]
+            svc._ensure_whatsapp_tab_ready = MagicMock()  # type: ignore[assignment]
+
+            svc.init_browser()
+
+            svc._kill_stale_chromedriver_processes.assert_not_called()
+
+    def test_init_browser_can_kill_global_chromedriver_when_enabled(self):
+        with tempfile.TemporaryDirectory() as td:
+            primary = os.path.join(td, "wa-profile")
+            svc = WhatsAppService(
+                primary,
+                qr_timeout=10,
+                kill_stale_chromedriver=True,
+            )
+
+            svc._kill_stale_chromedriver_processes = MagicMock()  # type: ignore[method-assign]
+            svc._start_driver = MagicMock(return_value=MagicMock())  # type: ignore[assignment]
+            svc._wait_for_login = MagicMock()  # type: ignore[assignment]
+            svc._ensure_whatsapp_tab_ready = MagicMock()  # type: ignore[assignment]
+
+            svc.init_browser()
+
+            svc._kill_stale_chromedriver_processes.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -122,6 +122,7 @@ class WhatsAppService:
         qr_timeout: int = 300,
         allow_ephemeral_fallback: bool = False,
         allow_profile_reset: bool = False,
+        kill_stale_chromedriver: bool = False,
     ) -> None:
         self._selenium_data_dir = selenium_data_dir
         self._secondary_profile_dir = f"{selenium_data_dir}_backup"
@@ -129,6 +130,7 @@ class WhatsAppService:
         self._qr_timeout = qr_timeout
         self._allow_ephemeral_fallback = allow_ephemeral_fallback
         self._allow_profile_reset = allow_profile_reset
+        self._kill_stale_chromedriver = kill_stale_chromedriver
         self._driver: Optional[webdriver.Chrome] = None
         self._max_send_attempts = 3
         self._temp_profile_dir: Optional[str] = None
@@ -370,7 +372,8 @@ class WhatsAppService:
         if self._driver:
             self.close()
 
-        self._kill_stale_chromedriver_processes()
+        if self._kill_stale_chromedriver:
+            self._kill_stale_chromedriver_processes()
 
         os.makedirs(self._selenium_data_dir, exist_ok=True)
         self._cleanup_profile_locks(self._selenium_data_dir)
@@ -563,8 +566,8 @@ class WhatsAppService:
             )
         except TimeoutException:
             pass
-        except Exception:
-            pass
+        except WebDriverException as exc:
+            logger.debug("Search trigger interaction failed: %s", exc)
 
         for keys in (
             (Keys.CONTROL, Keys.ALT, Keys.SHIFT, "f"),
@@ -623,12 +626,17 @@ class WhatsAppService:
         if expected_clean == actual_clean:
             return True
 
-        if expected_clean in actual_clean or actual_clean in expected_clean:
-            return True
-
         expected_digits = re.sub(r"\D", "", expected_clean)
         actual_digits = re.sub(r"\D", "", actual_clean)
         if expected_digits and actual_digits and expected_digits == actual_digits:
+            return True
+
+        expected_parts = expected_clean.split()
+        if not expected_parts:
+            return False
+
+        expected_pattern = r"\s+".join(re.escape(part) for part in expected_parts)
+        if re.search(rf"(?<!\w){expected_pattern}(?!\w)", actual_clean):
             return True
 
         return False
