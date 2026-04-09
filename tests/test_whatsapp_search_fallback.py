@@ -10,6 +10,12 @@ from src.whatsapp_service import WhatsAppService, WhatsAppSelectors
 
 
 class WhatsAppSearchFallbackTest(unittest.TestCase):
+    def test_chat_title_match_allows_contains(self):
+        self.assertTrue(WhatsAppService._matches_chat_title("Muazzam", "muazzam Ijt"))
+        self.assertTrue(
+            WhatsAppService._matches_chat_title("Ibrahim Salman", "Ibrahim")
+        )
+
     def test_ensure_whatsapp_tab_ready_does_not_reload_if_on_whatsapp(self):
         svc = WhatsAppService("C:/tmp/wa-profile", qr_timeout=10)
 
@@ -62,6 +68,40 @@ class WhatsAppSearchFallbackTest(unittest.TestCase):
         active.send_keys.assert_called()
         sent = active.send_keys.call_args[0][0]
         self.assertIn(Keys.CONTROL, sent)
+        self.assertNotEqual(sent, Keys.CONTROL + "f")
+
+    def test_open_search_box_tries_trigger_before_shortcuts(self):
+        svc = WhatsAppService("C:/tmp/wa-profile", qr_timeout=10)
+
+        driver = MagicMock()
+        svc._driver = driver
+
+        trigger = MagicMock()
+        search_box = MagicMock()
+        calls = {"count": 0}
+
+        def fake_find(locators, timeout=20, require_clickable=False):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                self.assertEqual(locators, WhatsAppSelectors.SEARCH_BOX)
+                raise TimeoutException("search collapsed")
+            if calls["count"] == 2:
+                self.assertEqual(locators, WhatsAppSelectors.SEARCH_TRIGGER)
+                self.assertTrue(require_clickable)
+                return trigger
+            if calls["count"] == 3:
+                self.assertEqual(locators, WhatsAppSelectors.SEARCH_BOX)
+                self.assertTrue(require_clickable)
+                return search_box
+            raise AssertionError("Unexpected extra call")
+
+        svc._find_first_element = fake_find  # type: ignore[assignment]
+
+        result = svc._open_search_box(timeout=20)
+
+        self.assertIs(result, search_box)
+        trigger.click.assert_called_once()
+        driver.switch_to.active_element.send_keys.assert_not_called()
 
     def test_fallback_moves_to_secondary_profile(self):
         with tempfile.TemporaryDirectory() as td:

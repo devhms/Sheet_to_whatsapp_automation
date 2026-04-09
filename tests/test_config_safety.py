@@ -1,6 +1,8 @@
 import tempfile
 import unittest
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 from src.config import Config
 
@@ -62,6 +64,45 @@ class ConfigSafetyTest(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 cfg._validate()
+
+    def test_ignores_placeholder_sheet_url_env_override(self):
+        with tempfile.TemporaryDirectory() as td:
+            data = self._build_base_config(td)
+            original_url = data["sheet_url"]
+
+            cfg = Config.__new__(Config)
+            cfg._config = data
+
+            with patch.dict(
+                os.environ,
+                {
+                    "GOOGLE_SHEET_URL": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+                },
+                clear=True,
+            ):
+                cfg._apply_env_overrides()
+
+            self.assertEqual(cfg._config["sheet_url"], original_url)
+
+    def test_allows_real_sheet_url_env_override(self):
+        with tempfile.TemporaryDirectory() as td:
+            data = self._build_base_config(td)
+            override_url = (
+                "https://docs.google.com/spreadsheets/d/"
+                "1G0_3GSC8F6iQUEFf5_iwVVz5aCWi4hO1FB-V9z9uplM/edit"
+            )
+
+            cfg = Config.__new__(Config)
+            cfg._config = data
+
+            with patch.dict(
+                os.environ,
+                {"GOOGLE_SHEET_URL": override_url},
+                clear=True,
+            ):
+                cfg._apply_env_overrides()
+
+            self.assertEqual(cfg._config["sheet_url"], override_url)
 
 
 if __name__ == "__main__":

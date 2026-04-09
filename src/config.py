@@ -50,17 +50,28 @@ class Config:
         }
 
         for env_key, config_key in env_map.items():
-            env_val = os.environ.get(env_key)
-            if env_val:
-                if config_key in ("whatsapp_qr_timeout", "poll_interval_seconds"):
-                    try:
-                        self._config[config_key] = int(env_val)
-                    except ValueError:
-                        logger.warning(
-                            "Invalid integer value for %s: %s", env_key, env_val
-                        )
-                else:
-                    self._config[config_key] = env_val
+            raw_env_val = os.environ.get(env_key)
+            if raw_env_val is None:
+                continue
+
+            env_val = raw_env_val.strip()
+            if not env_val:
+                continue
+
+            if config_key == "sheet_url" and self._is_placeholder_sheet_url(env_val):
+                logger.warning(
+                    "Ignoring GOOGLE_SHEET_URL placeholder value from environment. "
+                    "Set GOOGLE_SHEET_URL to a real sheet URL or leave it unset."
+                )
+                continue
+
+            if config_key in ("whatsapp_qr_timeout", "poll_interval_seconds"):
+                try:
+                    self._config[config_key] = int(env_val)
+                except ValueError:
+                    logger.warning("Invalid integer value for %s: %s", env_key, env_val)
+            else:
+                self._config[config_key] = env_val
 
         targets_env = os.environ.get("TARGETS")
         if targets_env:
@@ -82,6 +93,12 @@ class Config:
             self._config["all_members"] = [
                 m.strip() for m in members_env.split(",") if m.strip()
             ]
+
+    @staticmethod
+    def _is_placeholder_sheet_url(value: str) -> bool:
+        if "YOUR_SHEET_ID" in value.upper():
+            return True
+        return False
 
     def _validate(self) -> None:
         service_file = self.service_account_file

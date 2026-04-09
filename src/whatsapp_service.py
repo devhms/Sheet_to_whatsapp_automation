@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import time
 from typing import Optional
@@ -84,6 +85,15 @@ class WhatsAppSelectors:
         ),
     ]
 
+    SEARCH_TRIGGER = [
+        (By.CSS_SELECTOR, '#side [data-testid="chat-list-search"]'),
+        (
+            By.XPATH,
+            '//div[@id="side"]//*[@data-icon="search"]/ancestor::*[@role="button"][1]',
+        ),
+        (By.XPATH, '//div[@id="side"]//button[contains(@aria-label,"Search")]'),
+    ]
+
     MESSAGE_BOX = [
         (By.XPATH, '//footer//div[@contenteditable="true"][@data-tab="10"]'),
         (By.XPATH, '//footer//div[@role="textbox"][@contenteditable="true"]'),
@@ -92,7 +102,13 @@ class WhatsAppSelectors:
 
     CHAT_TITLE = [
         (By.CSS_SELECTOR, 'header [data-testid="conversation-info-header-chat-title"]'),
+        (
+            By.CSS_SELECTOR,
+            'header [data-testid="conversation-header"] span[dir="auto"]',
+        ),
         (By.CSS_SELECTOR, "header span[title]"),
+        (By.XPATH, '//header//*[contains(@class,"copyable-text")]//span[@dir="auto"]'),
+        (By.XPATH, '//header//span[@dir="auto"]'),
         (By.XPATH, "//header//h1//span"),
     ]
 
@@ -174,6 +190,25 @@ class WhatsAppService:
                     except OSError:
                         pass
 
+    @staticmethod
+    def _kill_stale_chromedriver_processes() -> None:
+        """Kill orphaned chromedriver processes that can break new sessions."""
+        if os.name != "nt":
+            return
+
+        try:
+            result = subprocess.run(
+                ["taskkill", "/F", "/IM", "chromedriver.exe", "/T"],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=False,
+            )
+            if result.returncode == 0:
+                logger.info("Cleared stale chromedriver.exe processes")
+        except Exception as exc:
+            logger.debug("Could not cleanup stale chromedriver processes: %s", exc)
+
     def _reset_corrupted_profile(self, profile_dir: str) -> bool:
         """Move corrupted profile aside and recreate clean profile directory."""
         if not profile_dir:
@@ -227,6 +262,7 @@ class WhatsAppService:
         options.add_argument("--disable-dev-shm-usage")
         if profile_dir:
             options.add_argument(f"--user-data-dir={profile_dir}")
+        options.add_argument("--remote-debugging-port=0")
         options.add_argument("--disable-background-networking")
         options.add_argument("--disable-default-apps")
         options.add_argument("--disable-extensions")
@@ -333,6 +369,8 @@ class WhatsAppService:
 
         if self._driver:
             self.close()
+
+        self._kill_stale_chromedriver_processes()
 
         os.makedirs(self._selenium_data_dir, exist_ok=True)
         self._cleanup_profile_locks(self._selenium_data_dir)
@@ -510,10 +548,27 @@ class WhatsAppService:
         except TimeoutException:
             pass
 
+        try:
+            trigger = self._find_first_element(
+                WhatsAppSelectors.SEARCH_TRIGGER,
+                timeout=4,
+                require_clickable=True,
+            )
+            trigger.click()
+            time.sleep(0.25)
+            return self._find_first_element(
+                WhatsAppSelectors.SEARCH_BOX,
+                timeout=6,
+                require_clickable=True,
+            )
+        except TimeoutException:
+            pass
+        except Exception:
+            pass
+
         for keys in (
             (Keys.CONTROL, Keys.ALT, Keys.SHIFT, "f"),
             (Keys.CONTROL, Keys.ALT, "/"),
-            (Keys.CONTROL, "f"),
         ):
             try:
                 action = "".join(keys)
@@ -566,6 +621,9 @@ class WhatsAppService:
             return False
 
         if expected_clean == actual_clean:
+            return True
+
+        if expected_clean in actual_clean or actual_clean in expected_clean:
             return True
 
         expected_digits = re.sub(r"\D", "", expected_clean)
